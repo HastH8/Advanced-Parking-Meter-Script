@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Parking System</title>
+    <link rel="stylesheet" href="style/styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <!-- Ticket Check UI -->
+    <div class="ticket-container" id="ticketContainer">
+        <div class="ticket" id="ticketUI">
+            <div class="ticket-header">
+                <div class="event-info">
+                    <h1 class="event-name">PARKING TICKET</h1>
+                    <p class="event-date" id="ticketDate">DATE & TIME</p>
+                </div>
+                <div class="ticket-status" id="ticketStatus">
+                    <span>VALID</span>
+                </div>
+            </div>
+            
+            <div class="ticket-body">
+                <div class="ticket-details">
+                    <div class="detail-item">
+                        <p class="detail-label">LICENSE PLATE</p>
+                        <p class="detail-value" id="licensePlate">ABC-123</p>
+                    </div>
+                    <div class="detail-item">
+                        <p class="detail-label">LOCATION</p>
+                        <p class="detail-value" id="streetName">Street Name</p>
+                    </div>
+                    <div class="detail-item">
+                        <p class="detail-label">EXPIRATION</p>
+                        <p class="detail-value" id="expirationTime">2023-01-01 12:00:00</p>
+                    </div>
+                </div>
+                
+                <div class="ticket-barcode">
+                    <div class="barcode-image">
+                        <svg viewBox="0 0 100 30">
+                            <rect x="5" y="0" width="1" height="30" />
+                            <rect x="8" y="0" width="2" height="30" />
+                            <rect x="12" y="0" width="1" height="30" />
+                            <rect x="16" y="0" width="3" height="30" />
+                            <rect x="22" y="0" width="2" height="30" />
+                            <rect x="27" y="0" width="1" height="30" />
+                            <rect x="32" y="0" width="3" height="30" />
+                            <rect x="38" y="0" width="1" height="30" />
+                            <rect x="42" y="0" width="2" height="30" />
+                            <rect x="47" y="0" width="1" height="30" />
+                            <rect x="51" y="0" width="3" height="30" />
+                            <rect x="57" y="0" width="2" height="30" />
+                            <rect x="62" y="0" width="1" height="30" />
+                            <rect x="66" y="0" width="3" height="30" />
+                            <rect x="72" y="0" width="1" height="30" />
+                            <rect x="76" y="0" width="2" height="30" />
+                            <rect x="81" y="0" width="1" height="30" />
+                            <rect x="85" y="0" width="3" height="30" />
+                            <rect x="91" y="0" width="2" height="30" />
+                        </svg>
+                    </div>
+                    <p class="ticket-number" id="ticketId">TKT-45678-9012</p>
+                </div>
+            </div>
+            
+            <div class="ticket-footer">
+                <div class="organizer-info">
+                    <p>Issued by: <strong>Parking Authority</strong></p>
+                </div>
+                <div class="ticket-terms">
+                    <p>This ticket is non-transferable. Keep visible on dashboard.</p>
+                </div>
+            </div>
+        </div>
+        <div class="no-ticket" id="noTicketUI">
+            <div class="no-ticket-content">
+                <h2>NO VALID TICKET</h2>
+                <p id="noTicketMessage">This vehicle has no valid parking ticket for this location.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Purchase Ticket UI -->
+    <div class="purchase-container" id="purchaseContainer">
+        <div class="purchase-ticket">
+            <div class="ticket-header">
+                <div class="event-info">
+                    <h1 class="event-name">BUY PARKING TICKET</h1>
+                    <p class="event-date" id="currentDateTime">DATE & TIME</p>
+                </div>
+                <div class="close-button" id="closeButton">
+                    <i class="fas fa-times"></i>
+                </div>
+            </div>
+            
+            <div class="purchase-body">
+                <div class="purchase-form">
+                    <div class="form-group">
+                        <label for="licensePlateSelect">License Plate:</label>
+                        <select id="licensePlateSelect" class="form-control">
+                            <option value="" disabled selected>Select a vehicle</option>
+                            <!-- Options will be populated dynamically -->
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="durationSlider">Parking Duration (minutes):</label>
+                        <div class="slider-container">
+                            <input type="range" id="durationSlider" class="form-slider" min="1" max="30" value="15">
+                            <span id="durationValue">15</span>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="streetName">Street Name:</label>
+                        <input type="text" id="streetNameInput" class="form-control" readonly>
+                    </div>
+                    
+                    <div class="price-display">
+                        <span>Total Price:</span>
+                        <span id="totalPrice">$15.00</span>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button id="purchaseButton" class="btn-purchase">Purchase Ticket</button>
+                        <button id="cancelButton" class="btn-cancel">Cancel</button>
+                    </div>
+                </div>
+                
+                <div class="purchase-preview">
+                    <div class="preview-header">
+                        <h3>Ticket Preview</h3>
+                    </div>
+                    <div class="preview-ticket">
+                        <div class="preview-plate">
+                            <span id="previewPlate">ABC-123</span>
+                        </div>
+                        <div class="preview-details">
+                            <div class="preview-item">
+                                <span class="preview-label">Duration:</span>
+                                <span class="preview-value" id="previewDuration">15 minutes</span>
+                            </div>
+                            <div class="preview-item">
+                                <span class="preview-label">Street:</span>
+                                <span class="preview-value" id="previewStreet">Main Street</span>
+                            </div>
+                            <div class="preview-item">
+                                <span class="preview-label">Expires:</span>
+                                <span class="preview-value" id="previewExpires">2023-01-01 12:15:00</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="purchase-footer">
+                <p>Payment will be processed from your bank account.</p>
+                <p>Keep your ticket visible on your dashboard at all times.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Combined JavaScript -->
+    <script src="style/script.js"></script>
+</body>
+</html>
