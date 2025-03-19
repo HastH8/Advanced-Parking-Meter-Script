@@ -24,6 +24,7 @@ The system features a beautifully designed UI that matches modern parking system
 ## Requirements:
 - QB-Core
 - ox_lib
+- ([Kedi_Ui](https://github.com/HastH8/kedi_ui)) 
 - MySQL
 - (Optional) ox_target or qb-target
 
