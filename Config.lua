@@ -2,10 +2,6 @@ Config = {}
 
 Config.debug = false -- Enable / Disable Debug Messages
 
-Config.Notify = 'ox' -- 'mythic_notify' , 'pNotify' , 'qb' , 'ox' , 'custom'
-
-Config.TextUI = 'ox' -- 'qb-textui' , 'ox' , 'custom'
-
 Config.Inv = 'codem-inventory' -- 'qb-inventory' , 'ox_inventory' , 'codem-inventory' , 'qs-inventory' , 'custom'
 
 Config.Moneytype = 'bank' -- 'cash' , 'bank' , 'black_money'
@@ -13,8 +9,6 @@ Config.Moneytype = 'bank' -- 'cash' , 'bank' , 'black_money'
 Config.locales = "en"  -- Language
 
 Config.TargetSystem = "ox-target" --ox-target or qb-target
-
-Config.Progressbar = "ox-progressCircle"  -- qb-progressbar/ox-progressbar/ ox-progressCircle/ custom-progressbar
 
 Config.UTCTime = 0 --Put here you UTC time + you can get it from here for your region https://en.wikipedia.org/wiki/List_of_UTC_offsets
 

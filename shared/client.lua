@@ -13,39 +13,13 @@ function debug(message)
 end
 
 function Notify(title, message, type, length)
-    if not type then
-        type = "info"
-    end
-    if not length then
-        length = 5000
-    end
-    if not title then
-        title = "Job"
-    end
-
-    if Config.Notify == "mythic_notify" then
-        exports['mythic_notify']:SendAlert(type, title, message, length)
-    elseif Config.Notify == "pNotify" then
-        exports.pNotify:SendNotification({
-            text = message,
-            type = type,
-            layout = "centerRight",
-            timeout = length
-        })
-    elseif Config.Notify == "qb" then
-        QBCore.Functions.Notify(message, type, length)
-    elseif Config.Notify == "ox" then
-        lib.notify({
-            title = title,
-            description = message,
-            type = type,
-            position = 'top'
-        })
-    elseif Config.Notify == "custom" then
-        debug("Custom notify has not been integrated integrate your notify in shared/client.lua")
-    else
-        debug("Notify not found")
-    end
+    exports['kedi_ui']:ShowNotification({
+        type = type or 'info', -- 'success', 'error', 'warning', 'info'
+        title = title,
+        message = message,
+        duration = length or 5000, -- milliseconds
+        icon = icon or 'fa-solid fa-square-parking' -- optional
+    })
 end
 
 if Config.TargetSystem == "qb-target" then
@@ -153,10 +127,6 @@ elseif Config.TargetSystem == "ox-target" then
     end
 end
 
-function CustomProgressbar(progressName, progressDuration, progressLabel, progressanimDict, progressanim)
-    -- Put here your own progressbar 
-end
-
 if Config.UseRobbery then
     RegisterNetEvent('meter:AlertPolice', function(coords)
 
@@ -227,3 +197,9 @@ function EnumerateVehicles()
         EndFindVehicle(handle)
     end)
 end
+
+
+RegisterNetEvent('kedi_ui:client:Notify')
+AddEventHandler('kedi_ui:client:Notify', function(data)
+    Notify(data.title, data.message, data.type, data.length, data.icon)
+end)

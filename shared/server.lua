@@ -119,28 +119,12 @@ function hasmoney(source, amount)
     end
 end
 
-function SerNotify(source, title, message, type, length)
-    if Config.Notify == "mythic_notify" then
-        exports['mythic_notify']:SendAlert(type, title, message, length)
-    elseif Config.Notify == "pNotify" then
-        exports.pNotify:SendNotification({
-            text = message,
-            type = type,
-            layout = "centerRight",
-            timeout = length
-        })
-    elseif Config.Notify == "qb" then
-        TriggerClientEvent('QBCore:Notify', source, message, type, 5000)
-    elseif Config.Notify == "ox" then
-        TriggerClientEvent('ox_lib:notify', source, {
-            title = title,
-            description = message,
-            type = type,
-            position = 'top'
-        })
-    elseif Config.Notify == "custom" then
-        debug("Custom notify has not been integrated integrate your notify in shared/client.lua")
-    else
-        debug("Notify not found")
-    end
+function SerNotify(source, title, message, type, length, icon)
+    TriggerClientEvent('kedi_ui:client:Notify', source, {
+        title = title,
+        message = message,
+        type = type,
+        length = length or 5000,
+        icon = icon or "fa-solid fa-square-parking"
+    })
 end

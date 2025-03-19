@@ -200,18 +200,22 @@ if Config.UseRobbery then
     end)
 
     RegisterNetEvent('meter:RobParkingMeterProgressbar', function(pos, identifier)
-        if lib.progressBar({
-            duration = Config.RobParkingMeterDuration,
+        exports['kedi_ui']:StartProgress({
             label = Config.RobParkingMeterProgressLabel,
-            useWhileDead = false,
-            canCancel = true,
-            anim = {
+            duration = Config.RobParkingMeterDuration, -- milliseconds
+            canCancel = true, -- allow cancellation with X key
+            animation = {
                 dict = "mini@repair",
-                clip = "fixing_a_ped"
-            }
-        }) then
-            RobberySkillcheck(pos, identifier)
-        end
+                name = "fixing_a_ped",
+                flags = 49
+            },
+            onComplete = function()
+                RobberySkillcheck(pos, identifier)
+            end,
+            onCancel = function()
+                Notify("Parking Meter", "Robbery Canceled", "error", 5000)
+            end
+        })
     end)
 
     function RobberySkillcheck(pos, identifier)
