@@ -1,4 +1,8 @@
-local QBCore = exports['qb-core']:GetCoreObject()
+if Config.Core == "qbcore" then
+    QBCore = exports['qb-core']:GetCoreObject()
+elseif Config.Core == "esx" then
+    ESX = exports['es_extended']:getSharedObject()
+end
 local Webhook = "" -- Discord Webhook
 local itemRemoved = false
 
@@ -14,7 +18,7 @@ RegisterNetEvent('meter:AddMoney', function(source, pos, identifier, date, time,
     local MoneyAmount = Config.GetRobMoney
 
     if itemRemoved then
-        local Player = QBCore.Functions.GetPlayer(source)
+        local Player = GetPlayer(source)
         if Player then
             addmoney(source, MoneyAmount)
 
@@ -31,7 +35,7 @@ end)
 
 RegisterNetEvent('meter:RemoveItem', function(source, pos, identifier, date, time, expirationTime)
     local itemName = Config.RobItem
-    local Player = QBCore.Functions.GetPlayer(source)
+    local Player = GetPlayer(source)
 
     if Player then
         if Config.RemoveItem then
@@ -329,8 +333,8 @@ if Config.UseRobbery then
     RegisterNetEvent('meter:CheckPoliceCount', function(source, minPoliceCount)
         debug("Police Count: " .. minPoliceCount)
         local policeCount = 0
-        for _, player in pairs(QBCore.Functions.GetPlayers()) do
-            local Player = QBCore.Functions.GetPlayer(player)
+        for _, player in pairs(GetPlayers()) do
+            local Player = GetPlayer(player)
             if Player and Player.PlayerData.job.name == "police" and Player.PlayerData.job.onduty then
                 policeCount = policeCount + 1
             end

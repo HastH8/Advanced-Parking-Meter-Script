@@ -1,8 +1,10 @@
 Config = {}
 
-Config.debug = false -- Enable / Disable Debug Messages
+Config.debug = true -- Enable / Disable Debug Messages
 
-Config.Inv = 'codem-inventory' -- 'qb-inventory' , 'ox_inventory' , 'codem-inventory' , 'qs-inventory' , 'custom'
+Config.Core = "qbcore" -- qbcore or esx
+
+Config.Inv = 'tgiann-inventory' -- 'qb-inventory' , 'ox_inventory' , 'codem-inventory' , 'qs-inventory' ,tgiann-inventory,'custom'
 
 Config.Moneytype = 'bank' -- 'cash' , 'bank' , 'black_money'
 

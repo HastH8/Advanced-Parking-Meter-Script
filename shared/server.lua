@@ -1,8 +1,13 @@
-local QBCore = exports['qb-core']:GetCoreObject()
+if Config.Core == "qbcore" then
+    QBCore = exports['qb-core']:GetCoreObject()
+elseif Config.Core == "esx" then
+    ESX = exports['es_extended']:getSharedObject()
+end
+
 local itemRemoved = false
 
 function additem(source, item, count)
-    local Player = QBCore.Functions.GetPlayer(source)
+    local Player = GetPlayer(source)
     if not Player then
         return debug("Player not found")
     end
@@ -14,6 +19,8 @@ function additem(source, item, count)
         exports['codem-inventory']:AddItem(source, item, count)
     elseif Config.Inv == "qs-inventory" then
         exports['qs-inventory']:AddItem(source, item, count)
+    elseif Config.Inv == "tgiann-inventory" then
+        exports["tgiann-inventory"]:AddItem(source, item, count, nil, nil, false)
     elseif Config.Inv == "custom" then
         debug("Custom inventory has not been integrated integrate your inv in shared/server.lua")
     else
@@ -22,7 +29,7 @@ function additem(source, item, count)
 end
 
 function removeitem(source, item, count)
-    local Player = QBCore.Functions.GetPlayer(source)
+    local Player = GetPlayer(source)
     if not Player then
         return debug("Player not found")
     end
@@ -34,6 +41,8 @@ function removeitem(source, item, count)
         exports['codem-inventory']:RemoveItem(source, item, count)
     elseif Config.Inv == "qs-inventory" then
         exports['qs-inventory']:RemoveItem(source, item, count)
+    elseif Config.Inv == "tgiann-inventory" then
+        exports["tgiann-inventory"]:RemoveItem(source, item, count, nil, nil)
     elseif Config.Inv == "custom" then
         debug("Custom inventory has not been integrated integrate your inv in shared/server.lua")
     else
@@ -42,7 +51,7 @@ function removeitem(source, item, count)
 end
 
 function hasitem(source, item, count)
-    local Player = QBCore.Functions.GetPlayer(source)
+    local Player = GetPlayer(source)
     if not Player then
         return debug("Player not found")
     end
@@ -56,6 +65,8 @@ function hasitem(source, item, count)
         return exports['codem-inventory']:HasItem(source, item, count)
     elseif Config.Inv == "qs-inventory" then
         return exports['qs-inventory']:GetItemTotalAmount(source, item) >= count
+    elseif Config.Inv == "tgiann-inventory" then
+        return exports["tgiann-inventory"]:HasItem(source, item, count)
     elseif Config.Inv == "custom" then
         debug("Custom inventory has not been integrated integrate your inv in shared/server.lua")
         return false
@@ -65,17 +76,48 @@ function hasitem(source, item, count)
     end
 end
 
+function GetPlayer(source)
+    if Config.Core == "qbcore" then
+        return QBCore.Functions.GetPlayer(source)
+    elseif Config.Core == "esx" then
+        return ESX.GetPlayerFromId(source)
+    else
+        debug("Invalid core framework specified in config")
+        return nil
+    end
+end
+function GetPlayers()
+    if Config.Core == "qbcore" then
+        return QBCore.Functions.GetPlayers()
+    if Config.Core == "esx" then
+        return ESX.GetPlayers()
+    end
+end
 function addmoney(source, amount)
-    local Player = QBCore.Functions.GetPlayer(source)
+    local Player = GetPlayer(source)
+
     if not Player then
         return debug("Player not found")
     end
+
     if Config.Moneytype == "cash" then
-        Player.Functions.AddMoney("cash", amount)
+        if Config.Core == "qbcore" then
+            Player.Functions.AddMoney("cash", amount)
+        elseif Config.Core == "esx" then
+            Player.addMoney(amount)
+        end
     elseif Config.Moneytype == "bank" then
-        Player.Functions.AddMoney("bank", amount)
+        if Config.Core == "qbcore" then
+            Player.Functions.AddMoney("bank", amount)
+        elseif Config.Core == "esx" then
+            Player.addAccountMoney("bank", amount)
+        end
     elseif Config.Moneytype == "black_money" then
-        additem(source, "black_money", amount)
+        if Config.Core == "qbcore" then
+            additem(source, "black_money", amount)
+        elseif Config.Core == "esx" then
+            Player.addAccountMoney("black_money", amount)
+        end
     elseif Config.Moneytype == "custom" then
         debug("Custom money has not been integrated integrate your money in shared/server.lua")
     else
@@ -84,16 +126,30 @@ function addmoney(source, amount)
 end
 
 function removemoney(source, amount)
-    local Player = QBCore.Functions.GetPlayer(source)
+    local Player = GetPlayer(source)
+
     if not Player then
         return debug("Player not found")
     end
+
     if Config.Moneytype == "cash" then
-        Player.Functions.RemoveMoney("cash", amount)
+        if Config.Core == "qbcore" then
+            Player.Functions.RemoveMoney("cash", amount)
+        elseif Config.Core == "esx" then
+            Player.removeMoney(amount)
+        end
     elseif Config.Moneytype == "bank" then
-        Player.Functions.RemoveMoney("bank", amount)
+        if Config.Core == "qbcore" then
+            Player.Functions.RemoveMoney("bank", amount)
+        elseif Config.Core == "esx" then
+            Player.removeAccountMoney("bank", amount)
+        end
     elseif Config.Moneytype == "black_money" then
-        removeitemitem(source, "black_money", amount)
+        if Config.Core == "qbcore" then
+            removeitemitem(source, "black_money", amount)
+        elseif Config.Core == "esx" then
+            Player.removeAccountMoney("black_money", amount)
+        end
     elseif Config.Moneytype == "custom" then
         debug("Custom money has not been integrated integrate your money in shared/server.lua")
     else
@@ -102,22 +158,39 @@ function removemoney(source, amount)
 end
 
 function hasmoney(source, amount)
-    local Player = QBCore.Functions.GetPlayer(source)
+    local Player = GetPlayer(source)
+
     if not Player then
         return debug("Player not found")
     end
+
     if Config.Moneytype == "cash" then
-        return Player.PlayerData.money.cash >= amount
+        if Config.Core == "qbcore" then
+            return Player.PlayerData.money.cash >= amount
+        elseif Config.Core == "esx" then
+            return Player.getMoney() >= amount
+        end
     elseif Config.Moneytype == "bank" then
-        return Player.PlayerData.money.bank >= amount
+        if Config.Core == "qbcore" then
+            return Player.PlayerData.money.bank >= amount
+        elseif Config.Core == "esx" then
+            return Player.getAccount("bank").money >= amount
+        end
     elseif Config.Moneytype == "black_money" then
-        return hasitem(source, "black_money", amount)
+        if Config.Core == "qbcore" then
+            return hasitem(source, "black_money", amount)
+        elseif Config.Core == "esx" then
+            return Player.getAccount("black_money").money >= amount
+        end
     elseif Config.Moneytype == "custom" then
         debug("Custom money has not been integrated integrate your money in shared/server.lua")
+        return false
     else
         debug("Money not found")
+        return false
     end
 end
+
 
 function SerNotify(source, title, message, type, length, icon)
     TriggerClientEvent('kedi_ui:client:Notify', source, {

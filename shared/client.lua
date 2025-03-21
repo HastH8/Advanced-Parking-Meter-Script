@@ -1,5 +1,3 @@
-local QBCore = exports['qb-core']:GetCoreObject()
-
 local models = Config.TargetPropModels
 
 local bones = Config.BonesForTarget
