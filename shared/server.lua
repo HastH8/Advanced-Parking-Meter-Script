@@ -89,10 +89,11 @@ end
 function GetPlayers()
     if Config.Core == "qbcore" then
         return QBCore.Functions.GetPlayers()
-    if Config.Core == "esx" then
+    elseif Config.Core == "esx" then
         return ESX.GetPlayers()
     end
 end
+
 function addmoney(source, amount)
     local Player = GetPlayer(source)
 

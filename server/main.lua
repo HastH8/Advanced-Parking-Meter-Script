@@ -111,17 +111,17 @@ RegisterNetEvent('meter:GetDataFromDB', function(source, LicensePlate, streetNam
             local currentTime = os.time()
 
             for _, row in ipairs(results) do
-                local expirationTimeMillis = tonumber(row.expiration_time)
-                if expirationTimeMillis then
-                    local expirationTime = expirationTimeMillis / 1000
+                local expirationTime = tonumber(row.exp_timestamp)      
+                if expirationTime then
                     if currentTime <= expirationTime and streetName == row.streetname then
                         foundActiveTicket = true
-                        local expirationDateTime = os.date("%Y-%m-%d %H:%M:%S", expirationTime)
+                        local expirationDateTime = os.date("!%Y-%m-%d %H:%M:%S", expirationTime)
                         SerNotify(source, "Parking Meter", string.format(translations.PrkingGood, LicensePlate, expirationDateTime), "success", 5000)
                         break
                     end
                 end
             end
+            
 
             if not foundActiveTicket then
                 SerNotify(source, "Parking Meter", string.format(translations.NoParkingTicketForThisStreet, LicensePlate), "error", 5000)
@@ -157,11 +157,11 @@ RegisterNetEvent('meter:pay', function(source, LicensePlate, Duration, StreetNam
         -- Calculate expiration time
         local currentTime = os.time()
         local expirationTime = currentTime + (Duration * 60)
-        
-        -- Format for database
-        local formattedExpiration = os.date("%Y-%m-%d %H:%M:%S", expirationTime)
-        local currentDate = os.date("%Y-%m-%d", currentTime)
-        local currentTimeStr = os.date("%H:%M:%S", currentTime)
+
+        -- Format for database - use UTC time with the "!" prefix
+        local formattedExpiration = os.date("!%Y-%m-%d %H:%M:%S", expirationTime)
+        local currentDate = os.date("!%Y-%m-%d", currentTime)
+        local currentTimeStr = os.date("!%H:%M:%S", currentTime)
         
         MySQL.Async.execute('REPLACE INTO meter (licenseplate, streetname, parkduration, parkdate, parktime, expiration_time) VALUES (?, ?, ?, ?, ?, ?)',
             {
@@ -286,7 +286,7 @@ if Config.UseRobbery then
     RegisterNetEvent('meter:Robbery_GetDataFromDB', function(source, pos)
         local identifier = GetPlayerIdentifier(source)
 
-        MySQL.Async.fetchAll('SELECT * FROM meter_robbery WHERE identifier = ?', {identifier}, function(results)
+        MySQL.Async.fetchAll('SELECT *, UNIX_TIMESTAMP(expiration_time) as exp_timestamp FROM meter WHERE licenseplate = ?', {LicensePlate}, function(results)
             if #results > 0 then
                 local canRob = true
                 for _, row in ipairs(results) do

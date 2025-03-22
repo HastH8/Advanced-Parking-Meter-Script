@@ -4,7 +4,7 @@ Config.debug = true -- Enable / Disable Debug Messages
 
 Config.Core = "qbcore" -- qbcore or esx
 
-Config.Inv = 'tgiann-inventory' -- 'qb-inventory' , 'ox_inventory' , 'codem-inventory' , 'qs-inventory' ,tgiann-inventory,'custom'
+Config.Inv = 'codem-inventory' -- 'qb-inventory' , 'ox_inventory' , 'codem-inventory' , 'qs-inventory' ,tgiann-inventory,'custom'
 
 Config.Moneytype = 'bank' -- 'cash' , 'bank' , 'black_money'
 
@@ -12,7 +12,7 @@ Config.locales = "en"  -- Language
 
 Config.TargetSystem = "ox-target" --ox-target or qb-target
 
-Config.UTCTime = 0 --Put here you UTC time + you can get it from here for your region https://en.wikipedia.org/wiki/List_of_UTC_offsets
+Config.UTCTime = 0 -- DONOT EDIT
 
 Config.DeleteOldEntries = true -- Delete unused stuff in sql
 
