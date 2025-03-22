@@ -12,7 +12,9 @@ Config.locales = "en"  -- Language
 
 Config.TargetSystem = "ox-target" --ox-target or qb-target
 
-Config.UTCTime = 0 -- DONOT EDIT
+Config.UseServerTime = true -- Set to true to use server time consistently
+
+Config.UTCTime = 0 -- This will be used if UseServerTime is false
 
 Config.DeleteOldEntries = true -- Delete unused stuff in sql
 

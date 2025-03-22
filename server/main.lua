@@ -11,6 +11,61 @@ function debug(message)
         print("^1[DEBUG] ^7" .. message)
     end
 end
+-- Function to get accurate UTC time from an API
+function GetAccurateTime()
+    local apiUrl = "http://worldtimeapi.org/api/timezone/Etc/UTC"
+    local success, response = false, nil
+    
+    PerformHttpRequest(apiUrl, function(statusCode, responseText, headers)
+        if statusCode == 200 then
+            local data = json.decode(responseText)
+            if data and data.unixtime then
+                success = true
+                response = data.unixtime
+            end
+        end
+    end, 'GET')
+    
+    local timeout = 100 -- 5 seconds (50ms * 100)
+    local count = 0
+    while not success and count < timeout do
+        Citizen.Wait(50)
+        count = count + 1
+    end
+    if not success then
+        debug("API time fetch failed, using server time")
+        return os.time()
+    end
+    
+    debug("Got accurate time from API: " .. response)
+    return response
+end
+
+function ConvertToConfigTimezone(utcTime)
+    return utcTime + (Config.UTCTime * 3600)
+end
+
+function FormatTimeInConfigTimezone(utcTime, format)
+    local adjustedTime = ConvertToConfigTimezone(utcTime)
+    return os.date(format or "%Y-%m-%d %H:%M:%S", adjustedTime)
+end
+
+function GetServerTime()
+    return os.time()
+end
+
+function FormatTimeForDB(timestamp)
+    return os.date("!%Y-%m-%d %H:%M:%S", timestamp)
+end
+
+function FormatTimeForDisplay(timestamp)
+    if Config.UseServerTime then
+        return os.date("%Y-%m-%d %H:%M:%S", timestamp)
+    else
+        local adjustedTime = timestamp + (Config.UTCTime * 3600)
+        return os.date("!%Y-%m-%d %H:%M:%S", adjustedTime)
+    end
+end
 
 RegisterNetEvent('meter:AddMoney', function(source, pos, identifier, date, time, expirationTime)
     local identifierlist = ExtractIdentifiers(source)
@@ -58,41 +113,32 @@ RegisterNetEvent('meter:AlertPoliceServer', function(coords)
     TriggerEvent('emergencydispatch:emergencycall:new', "police", "A parking meter was robbed", coords, true)
 end)
 RegisterNetEvent('meter:InsertInDB', function(source, LicensePlate, ParkDuration, Streetname, Date, Time)
-    local seconds = math.floor(Time / 1000)
-    local UTCTime = Config.UTCTime
-    local currentTime = os.time()
+    local currentTime = GetServerTime()
     local newExpirationTime = currentTime + (ParkDuration * 60)
-
-    MySQL.Async.fetchAll('SELECT * FROM meter WHERE licenseplate = ? AND streetname = ?', {LicensePlate, Streetname},
+    local formattedCurrentTime = FormatTimeForDB(currentTime)
+    local formattedExpiration = FormatTimeForDB(newExpirationTime)
+    
+    MySQL.Async.fetchAll('SELECT *, UNIX_TIMESTAMP(expiration_time) as exp_timestamp FROM meter WHERE licenseplate = ? AND streetname = ?', {LicensePlate, Streetname},
         function(result)
             if #result > 0 then
                 local ticket = result[1]
-                local currentExpirationTime = tonumber(ticket.expiration_time) / 1000
-
+                local currentExpirationTime = tonumber(ticket.exp_timestamp)
+                
                 if newExpirationTime > currentExpirationTime then
                     MySQL.Async.execute([[
                     UPDATE meter
-                    SET parkduration = ?, parkdate = ?, 
-                    parktime = DATE_ADD(FROM_UNIXTIME(?), INTERVAL ? HOUR),
-                    expiration_time = FROM_UNIXTIME(?)
+                    SET parkduration = ?, parkdate = ?,
+                    parktime = ?,
+                    expiration_time = ?
                     WHERE licenseplate = ? AND streetname = ?
-                ]], {ParkDuration, Date, seconds, UTCTime, newExpirationTime, LicensePlate, Streetname},
-                        function(rowsChanged)
-                            if rowsChanged > 0 then
-                                TriggerEvent('meter:pay', source, LicensePlate, ParkDuration, Streetname, Date, Time)
-                            else
-                                SerNotify(source, "Parking Meter", translations.DataBaseError, "error", 5000)
-                            end
-                        end)
-                else
-                    SerNotify(source, "Parking Meter", string.format(translations.HasAllreadTicket, LicensePlate, Streetname), "error", 5000)
-                end
-            else
-                MySQL.Async.execute([[
-                INSERT INTO meter 
-                (licenseplate, streetname, parkduration, parkdate, parktime, expiration_time)
-                VALUES (?, ?, ?, ?, DATE_ADD(FROM_UNIXTIME(?), INTERVAL ? HOUR), FROM_UNIXTIME(?))
-            ]], {LicensePlate, Streetname, ParkDuration, Date, seconds, UTCTime, newExpirationTime},
+                    ]], {
+                        ParkDuration, 
+                        formattedCurrentTime:sub(1, 10), -- Date part
+                        formattedCurrentTime:sub(12), -- Time part
+                        formattedExpiration, 
+                        LicensePlate, 
+                        Streetname
+                    },
                     function(rowsChanged)
                         if rowsChanged > 0 then
                             TriggerEvent('meter:pay', source, LicensePlate, ParkDuration, Streetname, Date, Time)
@@ -100,28 +146,49 @@ RegisterNetEvent('meter:InsertInDB', function(source, LicensePlate, ParkDuration
                             SerNotify(source, "Parking Meter", translations.DataBaseError, "error", 5000)
                         end
                     end)
+                else
+                    SerNotify(source, "Parking Meter", string.format(translations.HasAllreadTicket, LicensePlate, Streetname), "error", 5000)
+                end
+            else
+                MySQL.Async.execute([[
+                INSERT INTO meter
+                (licenseplate, streetname, parkduration, parkdate, parktime, expiration_time)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ]], {
+                    LicensePlate, 
+                    Streetname, 
+                    ParkDuration, 
+                    formattedCurrentTime:sub(1, 10), -- Date part
+                    formattedCurrentTime:sub(12), -- Time part
+                    formattedExpiration
+                },
+                function(rowsChanged)
+                    if rowsChanged > 0 then
+                        TriggerEvent('meter:pay', source, LicensePlate, ParkDuration, Streetname, Date, Time)
+                    else
+                        SerNotify(source, "Parking Meter", translations.DataBaseError, "error", 5000)
+                    end
+                end)
             end
         end)
 end)
 
+
 RegisterNetEvent('meter:GetDataFromDB', function(source, LicensePlate, streetName)
-    MySQL.Async.fetchAll('SELECT * FROM meter WHERE licenseplate = ?', {LicensePlate}, function(results)
+    MySQL.Async.fetchAll('SELECT *, UNIX_TIMESTAMP(expiration_time) as exp_timestamp FROM meter WHERE licenseplate = ?', {LicensePlate}, function(results)
         if #results > 0 then
             local foundActiveTicket = false
-            local currentTime = os.time()
+            local currentTime = GetServerTime()
 
             for _, row in ipairs(results) do
-                local expirationTime = tonumber(row.exp_timestamp)      
-                if expirationTime then
-                    if currentTime <= expirationTime and streetName == row.streetname then
-                        foundActiveTicket = true
-                        local expirationDateTime = os.date("!%Y-%m-%d %H:%M:%S", expirationTime)
-                        SerNotify(source, "Parking Meter", string.format(translations.PrkingGood, LicensePlate, expirationDateTime), "success", 5000)
-                        break
-                    end
+                local expirationTime = tonumber(row.exp_timestamp)
+                if expirationTime and currentTime <= expirationTime and streetName == row.streetname then
+                    foundActiveTicket = true
+                    local formattedExpiration = FormatTimeForDisplay(expirationTime)
+                    SerNotify(source, "Parking Meter", string.format(translations.PrkingGood, LicensePlate, formattedExpiration), "success", 5000)
+                    break
                 end
             end
-            
 
             if not foundActiveTicket then
                 SerNotify(source, "Parking Meter", string.format(translations.NoParkingTicketForThisStreet, LicensePlate), "error", 5000)
@@ -142,7 +209,6 @@ RegisterNetEvent('meter:DeleteOldContent', function()
     end
 end)
 
-
 RegisterNetEvent('meter:pay', function(source, LicensePlate, Duration, StreetName)
     debug("Processing payment - Source: " .. source .. ", Plate: " .. LicensePlate .. ", Duration: " .. Duration .. ", Street: " .. StreetName)
     
@@ -154,14 +220,12 @@ RegisterNetEvent('meter:pay', function(source, LicensePlate, Duration, StreetNam
         debug("Player has enough money")
         removemoney(source, price)
         
-        -- Calculate expiration time
-        local currentTime = os.time()
+        -- Get server time
+        local currentTime = GetServerTime()
         local expirationTime = currentTime + (Duration * 60)
-
-        -- Format for database - use UTC time with the "!" prefix
-        local formattedExpiration = os.date("!%Y-%m-%d %H:%M:%S", expirationTime)
-        local currentDate = os.date("!%Y-%m-%d", currentTime)
-        local currentTimeStr = os.date("!%H:%M:%S", currentTime)
+        local formattedExpiration = FormatTimeForDB(expirationTime)
+        local currentDate = FormatTimeForDB(currentTime):sub(1, 10) 
+        local currentTimeStr = FormatTimeForDB(currentTime):sub(12) 
         
         MySQL.Async.execute('REPLACE INTO meter (licenseplate, streetname, parkduration, parkdate, parktime, expiration_time) VALUES (?, ?, ?, ?, ?, ?)',
             {
@@ -175,6 +239,8 @@ RegisterNetEvent('meter:pay', function(source, LicensePlate, Duration, StreetNam
             function(rowsChanged)
                 if rowsChanged > 0 then
                     debug("Successfully inserted ticket into database")
+                    local displayExpiration = FormatTimeForDisplay(expirationTime)
+                    
                     SerNotify(source, "Parking Meter", 
                         string.format(translations.ParkTicketBought, Duration, price), 
                         "success", 
@@ -200,62 +266,64 @@ RegisterNetEvent('meter:pay', function(source, LicensePlate, Duration, StreetNam
     end
 end)
 
+
 RegisterNetEvent('meter:GetDataFromDBForUI', function(source, LicensePlate, streetName)
     debug("Getting ticket data for UI - Source: " .. source .. ", Plate: " .. LicensePlate .. ", Street: " .. streetName)
-    
+   
     MySQL.Async.fetchAll('SELECT *, UNIX_TIMESTAMP(expiration_time) as exp_timestamp FROM meter WHERE licenseplate = ?', {LicensePlate}, function(results)
         debug("Database query returned " .. #results .. " results for plate: " .. LicensePlate)
-        
+       
         local ticketData = {
             hasTicket = false,
-            message = translations and string.format(translations.NoParkingTicket or "No parking ticket for %s", LicensePlate) or 
+            message = translations and string.format(translations.NoParkingTicket or "No parking ticket for %s", LicensePlate) or
                      "No parking ticket found"
         }
-        
+       
         if #results > 0 then
             local foundActiveTicket = false
-            local currentTime = os.time()
-            
+            local currentUtcTime = GetAccurateTime()
+           
             for i, row in ipairs(results) do
                 if streetName == row.streetname then
                     debug("Found ticket for matching street")
                     foundActiveTicket = true
-                    
+                   
                     -- Get expiration timestamp directly from the query result
-                    local expirationTime = tonumber(row.exp_timestamp)
-                    debug("Raw expiration timestamp: " .. tostring(expirationTime))
-                    
-                    if expirationTime then
-                        local formattedExpiration = os.date("%Y-%m-%d %H:%M:%S", expirationTime)
+                    local expirationUtcTime = tonumber(row.exp_timestamp)
+                    debug("Raw expiration timestamp: " .. tostring(expirationUtcTime))
+                   
+                    if expirationUtcTime then
+                        -- Format in configured timezone for display
+                        local formattedExpiration = FormatTimeInConfigTimezone(expirationUtcTime)
                         debug("Formatted expiration time: " .. formattedExpiration)
-                        
+                       
                         ticketData = {
                             hasTicket = true,
                             licensePlate = LicensePlate,
                             streetName = streetName,
                             expirationTime = formattedExpiration,
-                            currentDate = os.date("%Y-%m-%d %H:%M:%S", currentTime),
-                            isExpired = currentTime > expirationTime,
+                            currentDate = FormatTimeInConfigTimezone(currentUtcTime),
+                            isExpired = currentUtcTime > expirationUtcTime,
                             parkDuration = row.parkduration
                         }
-                        
-                        if currentTime <= expirationTime then
-                            SerNotify(source, "Parking Meter", 
-                                string.format(translations.PrkingGood or "Valid parking ticket for %s until %s", 
-                                    LicensePlate, 
+                       
+                        if currentUtcTime <= expirationUtcTime then
+                            SerNotify(source, "Parking Meter",
+                                string.format(translations.PrkingGood or "Valid parking ticket for %s until %s",
+                                    LicensePlate,
                                     formattedExpiration
-                                ), 
-                                "success", 
+                                ),
+                                "success",
                                 5000
                             )
                         else
-                            local timeDiff = os.difftime(currentTime, expirationTime)
+                            local timeDiff = os.difftime(currentUtcTime, expirationUtcTime)
                             local minutesOvertime = math.floor(timeDiff / 60)
-                            SerNotify(source, "Parking Meter", 
-                                string.format(translations.PrkingOvertime or "Parking expired by %s", 
+                            SerNotify(source, "Parking Meter",
+                                string.format(translations.PrkingOvertime or "Parking expired by %s",
                                     minutesOvertime .. " minutes"
-                                ), 
-                                "error", 
+                                ),
+                                "error",
                                 5000
                             )
                         end
@@ -268,19 +336,20 @@ RegisterNetEvent('meter:GetDataFromDBForUI', function(source, LicensePlate, stre
             end
 
             if not foundActiveTicket then
-                ticketData.message = translations and 
-                    string.format(translations.NoParkingTicketForThisStreet or "No parking ticket for %s at this location", LicensePlate) or 
+                ticketData.message = translations and
+                    string.format(translations.NoParkingTicketForThisStreet or "No parking ticket for %s at this location", LicensePlate) or
                     "No valid parking ticket found for this location"
                 SerNotify(source, "Parking Meter", ticketData.message, "error", 5000)
             end
         else
             SerNotify(source, "Parking Meter", ticketData.message, "error", 5000)
         end
-        
+       
         debug("Sending ticket data to client: " .. json.encode(ticketData))
         TriggerClientEvent('meter:DisplayTicketUI', source, ticketData)
     end)
 end)
+
 
 if Config.UseRobbery then
     RegisterNetEvent('meter:Robbery_GetDataFromDB', function(source, pos)
