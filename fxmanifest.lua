@@ -4,7 +4,7 @@ lua54 "yes"
 
 author "ked.ss"
 description "Park Meter"
-version "1.0.0"
+version "1.3.0"
 
 shared_scripts {
     "@ox_lib/init.lua",
@@ -28,6 +28,5 @@ ui_page 'html/index.html'
 files {
     'html/index.html',
     'html/style/styles.css',
-    'html/style/purchase.css',
     'html/style/script.js'
 }

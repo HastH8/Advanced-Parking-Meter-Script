@@ -3,7 +3,6 @@ local displayingTicket = false
 -- Function to format date time (client-side safe version)
 function FormatDateTime(timestamp)
     debug("Formatting timestamp: " .. tostring(timestamp))
-    -- Use a safer approach for client-side
     local year, month, day, hour, min, sec = string.match(timestamp, "(%d+)-(%d+)-(%d+) (%d+):(%d+):(%d+)")
     if year then
         return year.."-"..month.."-"..day.." "..hour..":"..min..":"..sec
@@ -15,8 +14,7 @@ end
 -- Function to get current date time formatted (client-side safe version)
 function GetCurrentDateTime()
     debug("Getting current date time")
-    -- Get current time from the server instead
-    return GetGameTimer() -- Just a placeholder, we'll get the actual date from the server
+    return GetGameTimer()
 end
 
 function ShowPurchaseUI(vehicles, streetName)
@@ -74,8 +72,6 @@ RegisterNUICallback('purchaseTicket', function(data, cb)
     debug("NUI callback: purchaseTicket received for plate: " .. data.plate)
     
     local clientId = GetPlayerServerId(PlayerId())
-    
-    -- Send purchase request to server
     TriggerServerEvent('meter:pay', clientId, data.plate, data.duration, data.streetName)
     
     HidePurchaseUI()
@@ -114,7 +110,6 @@ RegisterNetEvent('meter:OpenMenu', function()
     ShowPurchaseUI(licensePlates, streetName)
 end)
 
--- Helper function to toggle NUI frame
 function ToggleNuiFrame(toggle)
     debug("Toggling NUI frame: " .. tostring(toggle))
     SetNuiFocus(toggle, toggle)
@@ -122,24 +117,20 @@ function ToggleNuiFrame(toggle)
         action = toggle and 'openPurchaseUI' or 'closePurchaseUI'
     })
 end
+
 RegisterNetEvent('meter:CheckParkingTime', function()
     debug("Checking parking time")
     local ped = PlayerPedId()
     local clientId = GetPlayerServerId(PlayerId())
     local pos = GetEntityCoords(ped)
     local targetVehicle = GetClosestVehicle(pos.x, pos.y, pos.z, 5.0, 0, 70)
-    
     if targetVehicle == 0 then
         debug("No vehicle found nearby")
         return
     end
-    
     local streetName = GetStreetNameFromHashKey(GetStreetNameAtCoord(pos.x, pos.y, pos.z))
     local plate = GetVehicleNumberPlateText(targetVehicle)
-    
     debug("Vehicle check - Plate: " .. plate .. ", Street: " .. streetName)
-    
-    -- Request ticket data from server
     TriggerServerEvent('meter:GetDataFromDBForUI', clientId, plate, streetName)
 end)
 
@@ -155,16 +146,63 @@ RegisterNetEvent('meter:DisplayTicketUI', function(ticketData)
             streetName = ticketData.streetName,
             expirationTime = ticketData.expirationTime,
             currentDate = ticketData.currentDate,
-            isExpired = ticketData.isExpired
+            isExpired = ticketData.isExpired,
+            canFine = ticketData.canFine
         })
     else
         debug("Vehicle has no ticket, showing no ticket UI with message: " .. ticketData.message)
         ShowTicketUI({
             action = 'showTicket',
             hasTicket = false,
-            message = ticketData.message
+            message = ticketData.message,
+            licensePlate = ticketData.licensePlate,
+            streetName = ticketData.streetName,
+            canFine = ticketData.canFine
         })
     end
+end)
+
+
+RegisterNUICallback('buyNewTicket', function(data, cb)
+    debug("Buy new ticket button clicked for plate: " .. data.licensePlate)
+    SetNuiFocus(false, false)
+    SendNUIMessage({
+        action = 'hideTicket'
+    })
+    TriggerEvent('meter:OpenMenu')
+    
+    cb({})
+end)
+
+RegisterNUICallback('fineVehicleOwner', function(data, cb)
+    debug("Fine vehicle owner button clicked for plate: " .. data.licensePlate)
+    
+    SetNuiFocus(false, false)
+    SendNUIMessage({
+        action = 'hideTicket'
+    })
+    
+    TriggerEvent('meter:IssueParkedVehicleFine', data.licensePlate, data.streetName)
+    
+    cb({})
+end)
+
+RegisterNetEvent('meter:IssueParkedVehicleFine', function(licensePlate, streetName)
+    debug("Issuing fine for vehicle: " .. licensePlate .. " on street: " .. streetName)
+    local fineAmount = Config.DefaultFineAmount or 250
+    if Config.AllowCustomFineAmount then
+        local input = lib.inputDialog('Issue Parking Fine', {
+            {type = 'number', label = 'Fine Amount', description = 'Enter the fine amount', icon = 'dollar-sign', default = fineAmount, min = Config.MinFineAmount or 50, max = Config.MaxFineAmount or 1000}
+        })
+        
+        if input then
+            fineAmount = input[1]
+        else
+            -- User canceled the dialog
+            return
+        end
+    end
+    TriggerServerEvent('meter:IssueFine', licensePlate, streetName, fineAmount)
 end)
 
 if Config.UseRobbery then
@@ -202,8 +240,8 @@ if Config.UseRobbery then
     RegisterNetEvent('meter:RobParkingMeterProgressbar', function(pos, identifier)
         exports['kedi_ui']:StartProgress({
             label = Config.RobParkingMeterProgressLabel,
-            duration = Config.RobParkingMeterDuration, -- milliseconds
-            canCancel = true, -- allow cancellation with X key
+            duration = Config.RobParkingMeterDuration,
+            canCancel = true,
             animation = {
                 dict = "mini@repair",
                 name = "fixing_a_ped",

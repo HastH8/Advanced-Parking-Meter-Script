@@ -36,8 +36,31 @@ Config.PricePerMinutes = 1 -- Price
 
 Config.AllCanCheckVehicle = true -- Put true if you want everyone to check if there is ticket or false and set jobs below
 
-Config.JobCanCheckParkingTime =  {"ambulance", "mechanic", "police"} -- For OX-Target comment this if you use qb target and uncomment the line below
--- Config.JobCanCheckParkingTime = {["police"] = 0, ["sast"] = 0} -- For QB-Target
+-- For OX-Target
+Config.JobCanCheckParkingTime = {"ambulance", "mechanic", "police"} 
+-- For QB-Target
+-- Config.JobCanCheckParkingTime = {["police"] = 0, ["sast"] = 0}
+
+-- Society names for different jobs (used for billing)
+Config.SocietyNames = {
+    police = "police",
+    sheriff = "sheriff",
+    ranger = "ranger",
+    -- Add any other job names and their corresponding society names
+}
+
+-- Billing system to use
+-- Options: 'default', 'codem-billing', 'codem-billingv2', 'okokBilling', 'jaksamBilling', 'custom', 'tgg-billing '
+Config.BillScript = 'codem-billingv2'
+
+-- Fine amount settings
+Config.DefaultFineAmount = 250
+
+Config.AllowCustomFineAmount = true -- Set to false if you want to use a fixed fine amount
+
+Config.MinFineAmount = 50
+
+Config.MaxFineAmount = 1000
 
 Config.BonesForTarget = { -- Bones for the targetsystem; currently on the car
     "seat_dside_f",

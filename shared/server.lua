@@ -202,3 +202,161 @@ function SerNotify(source, title, message, type, length, icon)
         icon = icon or "fa-solid fa-square-parking"
     })
 end
+
+-- Function to get vehicle owner from database
+function GetVehicleOwner(licensePlate, callback)
+    if not licensePlate or licensePlate == "" then
+        callback(nil, false)
+        return
+    end
+
+    licensePlate = string.gsub(licensePlate, "%s+", "")
+    
+    if Config.Core == "qbcore" then
+        MySQL.Async.fetchAll('SELECT * FROM player_vehicles WHERE plate = @plate', {['@plate'] = licensePlate}, function(results)
+            if results and #results > 0 then
+                callback(results[1].citizenid, true)
+            else
+                callback(nil, false)
+            end
+        end)
+    elseif Config.Core == "esx" then
+        MySQL.Async.fetchAll('SELECT * FROM owned_vehicles WHERE plate = @plate', {['@plate'] = licensePlate}, function(results)
+            if results and #results > 0 then
+                callback(results[1].owner, true)
+            else
+                callback(nil, false)
+            end
+        end)
+    end
+end
+
+-- Function to issue a bill to a player
+function IssueBill(officerSource, targetIdentifier, amount, label, jobName)
+    -- Check if targetIdentifier is valid
+    if not targetIdentifier or targetIdentifier == "" then
+        return false
+    end
+    
+    local officerPlayer = GetPlayer(officerSource)
+    if not officerPlayer then return false end
+    
+    local officerIdentifier = nil
+    
+    if Config.Core == "qbcore" then
+        officerIdentifier = officerPlayer.PlayerData.citizenid
+    elseif Config.Core == "esx" then
+        officerIdentifier = officerPlayer.identifier
+    end
+    
+    local societyName = Config.SocietyNames[jobName] or jobName
+    
+    if Config.BillScript == 'default' then
+        if Config.Core == "esx" or Config.Core == "oldesx" then
+            MySQL.Async.execute('INSERT INTO billing (identifier, sender, target_type, target, label, amount) VALUES (@identifier, @sender, @target_type, @target, @label, @amount)',
+            {
+                ['@identifier'] = targetIdentifier,
+                ['@sender'] = officerIdentifier,
+                ['@target_type'] = 'society',
+                ['@target'] = societyName,
+                ['@label'] = label,
+                ['@amount'] = amount
+            })
+        else
+            -- QBCore uses phone_invoices table
+            MySQL.Async.execute('INSERT INTO `phone_invoices` (`citizenid`, `amount`, `society`, `sender`, `sendercitizenid`) VALUES (@citizenid, @amount, @society, @sender, @sendercitizenid)', 
+            {
+                ['@citizenid'] = targetIdentifier,
+                ['@amount'] = amount,
+                ['@society'] = societyName,
+                ['@sender'] = jobName,
+                ['@sendercitizenid'] = officerIdentifier
+            })
+        end
+        return true
+    elseif Config.BillScript == 'codem-billing' then
+        -- Get target source if online
+        local targetSource = nil
+        if Config.Core == "qbcore" then
+            local targetPlayer = QBCore.Functions.GetPlayerByCitizenId(targetIdentifier)
+            if targetPlayer then targetSource = targetPlayer.PlayerData.source end
+        elseif Config.Core == "esx" then
+            local targetPlayer = ESX.GetPlayerFromIdentifier(targetIdentifier)
+            if targetPlayer then targetSource = targetPlayer.source end
+        end
+        
+        if targetSource then
+            exports['codem-billing']:createBilling(officerSource, targetSource, amount, label, jobName)
+            return true
+        else
+            -- Offline billing fallback
+            return IssueBill(officerSource, targetIdentifier, amount, label, jobName)
+        end
+    elseif Config.BillScript == 'codem-billingv2' then
+        local targetSource = nil
+        if Config.Core == "qbcore" then
+            local targetPlayer = QBCore.Functions.GetPlayerByCitizenId(targetIdentifier)
+            if targetPlayer then targetSource = targetPlayer.PlayerData.source end
+        elseif Config.Core == "esx" then
+            local targetPlayer = ESX.GetPlayerFromIdentifier(targetIdentifier)
+            if targetPlayer then targetSource = targetPlayer.source end
+        end
+        
+        if targetSource then
+            exports["codem-billingv2"]:CreateBillingJob(officerSource, targetSource, amount, label)
+            return true
+        else
+            -- Offline billing fallback
+            return IssueBill(officerSource, targetIdentifier, amount, label, jobName)
+        end
+    elseif Config.BillScript == 'okokBilling' then
+        local targetSource = nil
+        if Config.Core == "qbcore" then
+            local targetPlayer = QBCore.Functions.GetPlayerByCitizenId(targetIdentifier)
+            if targetPlayer then targetSource = targetPlayer.PlayerData.source end
+        elseif Config.Core == "esx" then
+            local targetPlayer = ESX.GetPlayerFromIdentifier(targetIdentifier)
+            if targetPlayer then targetSource = targetPlayer.source end
+        end
+        
+        if targetSource then
+            TriggerEvent("okokBilling:CreateCustomInvoice", targetSource, amount, label, label, jobName, societyName)
+            return true
+        else
+            -- Offline billing fallback
+            return IssueBill(officerSource, targetIdentifier, amount, label, jobName)
+        end
+    elseif Config.BillScript == 'jaksamBilling' then
+        exports["billing_ui"]:createBill(officerIdentifier, targetIdentifier, label, amount, societyName, 'society')
+        return true
+    elseif Config.BillScript == 'tgg-billing' then
+        local invoiceData = {
+            items = {
+               {
+                    key = "parking",
+                    label = label,
+                    price = amount,
+                    quantity = 1,
+                    priceChange = false,
+                    quantityChange = false
+                }
+            },
+            total = amount,
+            notes = nil, -- Optional
+            sender = societyName, -- Your society job identifier e.g. 'police' or '__personal'
+            senderId = officerIdentifier, -- Usually this is the player's identifier
+            senderName = "Your sender name", -- Usually this is the player's name
+            recipientId = targetIdentifier, -- The recipient's identifier
+            recipientName = "The recipient name", -- The recipient's name
+            taxPercentage = 10,
+            senderCompanyName = societyName, -- If sender is '__personal' might be nil
+        }
+        exports["tgg-billing"]:CreateInvoice(invoiceData)
+        return true
+    elseif Config.BillScript == 'custom' then
+        -- Your custom billing script here
+        return true
+    end
+    
+    return false
+end

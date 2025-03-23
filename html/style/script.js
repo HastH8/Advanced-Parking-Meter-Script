@@ -37,6 +37,22 @@ window.addEventListener('DOMContentLoaded', function() {
     updateDateTime();
     setInterval(updateDateTime, 1000);
 });
+// Add this outside the message handler, perhaps in your document ready function
+document.querySelectorAll('button').forEach(button => {
+    button.addEventListener('click', function() {
+        debugLog('Buy new ticket button clicked');
+        fetch('https://kedi_parkmeter/buyNewTicket', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json; charset=UTF-8',
+            },
+            body: JSON.stringify({
+                licensePlate: document.getElementById('licensePlate')?.textContent || '',
+                streetName: document.getElementById('streetName')?.textContent || ''
+            })
+        });
+    });
+});
 
 // Listen for messages from the game client
 window.addEventListener('message', function(event) {
@@ -81,42 +97,134 @@ window.addEventListener('message', function(event) {
         debugLog('Opening ticket check UI');
         document.getElementById('ticketContainer').classList.add('show');
         document.getElementById('purchaseContainer').classList.remove('show');
-        
+       
+        // Log the data
+        debugLog('Received data: ' + JSON.stringify(data));
+        debugLog('canFine value: ' + (data.canFine ? 'true' : 'false'));
+       
         if (data.hasTicket) {
-            // Show valid ticket
+            // Show valid ticket UI
             debugLog('Showing valid ticket UI');
             document.getElementById('ticketUI').classList.add('show');
             document.getElementById('noTicketUI').classList.remove('show');
-            
+           
             // Update ticket information
             document.getElementById('licensePlate').textContent = data.licensePlate;
             document.getElementById('streetName').textContent = data.streetName;
             document.getElementById('expirationTime').textContent = data.expirationTime;
             document.getElementById('ticketDate').textContent = data.currentDate;
             document.getElementById('ticketId').textContent = 'TKT-' + Math.floor(Math.random() * 90000) + 10000;
-            debugLog('Updated ticket information');
             
             // Set status
             const statusElement = document.getElementById('ticketStatus');
+            const buyButton = document.getElementById('buyNewTicketBtn');
+            const fineButton = document.getElementById('finebtn');
+            
             if (data.isExpired) {
-                debugLog('Ticket is expired');
                 statusElement.innerHTML = '<span>EXPIRED</span>';
                 statusElement.classList.remove('valid');
                 statusElement.classList.add('expired');
+                
+                // Show buy button for expired tickets
+                if (buyButton) {
+                    buyButton.style.display = 'block';
+                    debugLog('Buy button should be visible for expired ticket');
+                }
+                
+                // Show fine button if player has permission - fixed condition
+                if (fineButton) {
+                    // Convert to boolean explicitly to handle any type issues
+                    const canFine = Boolean(data.canFine);
+                    debugLog('canFine converted to boolean: ' + canFine);
+                    
+                    if (canFine) {
+                        fineButton.style.display = 'block';
+                        debugLog('Fine button should be visible for expired ticket (has permission)');
+                    } else {
+                        fineButton.style.display = 'none';
+                        debugLog('Fine button hidden (no permission)');
+                    }
+                } else {
+                    debugLog('Fine button element not found');
+                }
             } else {
-                debugLog('Ticket is valid');
                 statusElement.innerHTML = '<span>VALID</span>';
                 statusElement.classList.add('valid');
                 statusElement.classList.remove('expired');
+                
+                // Hide buttons for valid tickets
+                if (buyButton) buyButton.style.display = 'none';
+                if (fineButton) fineButton.style.display = 'none';
             }
         } else {
-            // Show no ticket message
+            // Show no ticket UI
             debugLog('Showing no ticket UI with message: ' + data.message);
             document.getElementById('ticketUI').classList.remove('show');
             document.getElementById('noTicketUI').classList.add('show');
             document.getElementById('noTicketMessage').textContent = data.message;
+            
+            // Get buttons
+            const buyButton = document.getElementById('buyNewTicketBtn2');
+            const fineButton = document.getElementById('finebtn2');
+            
+            // Always show buy button for no ticket
+            if (buyButton) {
+                buyButton.style.display = 'block';
+                debugLog('Buy button should be visible for no ticket');
+            }
+            
+            // Show fine button if player has permission - fixed condition
+            if (fineButton) {
+                // Convert to boolean explicitly to handle any type issues
+                const canFine = Boolean(data.canFine);
+                debugLog('canFine converted to boolean (no ticket): ' + canFine);
+                
+                if (canFine) {
+                    fineButton.style.display = 'block';
+                    debugLog('Fine button should be visible for no ticket (has permission)');
+                } else {
+                    fineButton.style.display = 'none';
+                    debugLog('Fine button hidden for no ticket (no permission)');
+                }
+            } else {
+                debugLog('Fine button element not found (no ticket)');
+            }
         }
+        
+        // Add click handlers
+        document.querySelectorAll('.action-button').forEach(button => {
+            button.onclick = function() {
+                debugLog('Buy new ticket button clicked');
+                fetch('https://kedi_parkmeter/buyNewTicket', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json; charset=UTF-8',
+                    },
+                    body: JSON.stringify({
+                        licensePlate: data.licensePlate,
+                        streetName: data.streetName
+                    })
+                });
+            };
+        });
+        
+        document.querySelectorAll('.fine-button').forEach(button => {
+            button.onclick = function() {
+                debugLog('Fine owner button clicked');
+                fetch('https://kedi_parkmeter/fineVehicleOwner', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json; charset=UTF-8',
+                    },
+                    body: JSON.stringify({
+                        licensePlate: data.licensePlate,
+                        streetName: data.streetName
+                    })
+                });
+            };
+        });
     }
+    
     // Handle close UI messages
     else if (data.action === 'hideTicket' || data.action === 'closePurchaseUI') {
         debugLog('Closing all UIs');

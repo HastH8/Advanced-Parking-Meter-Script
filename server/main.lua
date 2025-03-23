@@ -11,51 +11,17 @@ function debug(message)
         print("^1[DEBUG] ^7" .. message)
     end
 end
--- Function to get accurate UTC time from an API
-function GetAccurateTime()
-    local apiUrl = "http://worldtimeapi.org/api/timezone/Etc/UTC"
-    local success, response = false, nil
-    
-    PerformHttpRequest(apiUrl, function(statusCode, responseText, headers)
-        if statusCode == 200 then
-            local data = json.decode(responseText)
-            if data and data.unixtime then
-                success = true
-                response = data.unixtime
-            end
-        end
-    end, 'GET')
-    
-    local timeout = 100 -- 5 seconds (50ms * 100)
-    local count = 0
-    while not success and count < timeout do
-        Citizen.Wait(50)
-        count = count + 1
-    end
-    if not success then
-        debug("API time fetch failed, using server time")
-        return os.time()
-    end
-    
-    debug("Got accurate time from API: " .. response)
-    return response
-end
-
-function ConvertToConfigTimezone(utcTime)
-    return utcTime + (Config.UTCTime * 3600)
-end
-
-function FormatTimeInConfigTimezone(utcTime, format)
-    local adjustedTime = ConvertToConfigTimezone(utcTime)
-    return os.date(format or "%Y-%m-%d %H:%M:%S", adjustedTime)
-end
 
 function GetServerTime()
     return os.time()
 end
 
 function FormatTimeForDB(timestamp)
-    return os.date("!%Y-%m-%d %H:%M:%S", timestamp)
+    if Config.UseServerTime then
+        return os.date("%Y-%m-%d %H:%M:%S", timestamp)
+    else
+        return os.date("!%Y-%m-%d %H:%M:%S", timestamp + (Config.UTCTime * 3600))
+    end
 end
 
 function FormatTimeForDisplay(timestamp)
@@ -133,8 +99,8 @@ RegisterNetEvent('meter:InsertInDB', function(source, LicensePlate, ParkDuration
                     WHERE licenseplate = ? AND streetname = ?
                     ]], {
                         ParkDuration, 
-                        formattedCurrentTime:sub(1, 10), -- Date part
-                        formattedCurrentTime:sub(12), -- Time part
+                        formattedCurrentTime:sub(1, 10),
+                        formattedCurrentTime:sub(12),
                         formattedExpiration, 
                         LicensePlate, 
                         Streetname
@@ -158,8 +124,8 @@ RegisterNetEvent('meter:InsertInDB', function(source, LicensePlate, ParkDuration
                     LicensePlate, 
                     Streetname, 
                     ParkDuration, 
-                    formattedCurrentTime:sub(1, 10), -- Date part
-                    formattedCurrentTime:sub(12), -- Time part
+                    formattedCurrentTime:sub(1, 10),
+                    formattedCurrentTime:sub(12),
                     formattedExpiration
                 },
                 function(rowsChanged)
@@ -211,16 +177,12 @@ end)
 
 RegisterNetEvent('meter:pay', function(source, LicensePlate, Duration, StreetName)
     debug("Processing payment - Source: " .. source .. ", Plate: " .. LicensePlate .. ", Duration: " .. Duration .. ", Street: " .. StreetName)
-    
-    -- Calculate price based on duration and price per minute
     local price = Duration * Config.PricePerMinutes
     debug("Calculated price: " .. price)
     
     if hasmoney(source, price) then
         debug("Player has enough money")
         removemoney(source, price)
-        
-        -- Get server time
         local currentTime = GetServerTime()
         local expirationTime = currentTime + (Duration * 60)
         local formattedExpiration = FormatTimeForDB(expirationTime)
@@ -266,48 +228,85 @@ RegisterNetEvent('meter:pay', function(source, LicensePlate, Duration, StreetNam
     end
 end)
 
-
 RegisterNetEvent('meter:GetDataFromDBForUI', function(source, LicensePlate, streetName)
     debug("Getting ticket data for UI - Source: " .. source .. ", Plate: " .. LicensePlate .. ", Street: " .. streetName)
+   local Player = GetPlayer(source)
+   local playerJob = ""
+   local canFine = false
    
-    MySQL.Async.fetchAll('SELECT *, UNIX_TIMESTAMP(expiration_time) as exp_timestamp FROM meter WHERE licenseplate = ?', {LicensePlate}, function(results)
+   if Player then
+       if Config.Core == "qbcore" then
+           playerJob = Player.PlayerData.job.name
+           debug("Player job: " .. playerJob)
+       elseif Config.Core == "esx" then
+           playerJob = Player.job.name
+           debug("Player job: " .. playerJob)
+       end
+       debug("Checking if job is in allowed list: " .. playerJob)
+       if type(Config.JobCanCheckParkingTime) == "table" then
+           if Config.TargetSystem == "qb-target" then
+               for job, _ in pairs(Config.JobCanCheckParkingTime) do
+                   if job == playerJob then
+                       canFine = true
+                       debug("Player can fine: true (job match in qb-target format)")
+                       break
+                   end
+               end
+           else
+               for _, job in ipairs(Config.JobCanCheckParkingTime) do
+                   debug("Checking against job: " .. job)
+                   if job == playerJob then
+                       canFine = true
+                       debug("Player can fine: true (job match in ox-target format)")
+                       break
+                   end
+               end
+           end
+       end
+   end
+    MySQL.Async.fetchAll('SELECT *, expiration_time as raw_expiration, UNIX_TIMESTAMP(expiration_time) as exp_timestamp FROM meter WHERE licenseplate = ?', {LicensePlate}, function(results)
         debug("Database query returned " .. #results .. " results for plate: " .. LicensePlate)
        
         local ticketData = {
             hasTicket = false,
             message = translations and string.format(translations.NoParkingTicket or "No parking ticket for %s", LicensePlate) or
-                     "No parking ticket found"
+                     "No parking ticket found",
+            canFine = canFine,
+            licensePlate = LicensePlate,
+            streetName = streetName
         }
        
         if #results > 0 then
             local foundActiveTicket = false
-            local currentUtcTime = GetAccurateTime()
+            local currentTimestamp = os.time()
            
             for i, row in ipairs(results) do
                 if streetName == row.streetname then
                     debug("Found ticket for matching street")
                     foundActiveTicket = true
                    
-                    -- Get expiration timestamp directly from the query result
-                    local expirationUtcTime = tonumber(row.exp_timestamp)
-                    debug("Raw expiration timestamp: " .. tostring(expirationUtcTime))
-                   
-                    if expirationUtcTime then
-                        -- Format in configured timezone for display
-                        local formattedExpiration = FormatTimeInConfigTimezone(expirationUtcTime)
-                        debug("Formatted expiration time: " .. formattedExpiration)
-                       
+                    local expirationTimestamp = tonumber(row.exp_timestamp)
+                    
+                    if expirationTimestamp then
+                        debug("Using timestamp: " .. expirationTimestamp)
+                        
+                        local formattedCurrent = os.date("%Y-%m-%d %H:%M:%S", currentTimestamp)
+                        local formattedExpiration = os.date("%Y-%m-%d %H:%M:%S", expirationTimestamp)
+                        local isExpired = currentTimestamp > expirationTimestamp
+                        
                         ticketData = {
                             hasTicket = true,
                             licensePlate = LicensePlate,
                             streetName = streetName,
                             expirationTime = formattedExpiration,
-                            currentDate = FormatTimeInConfigTimezone(currentUtcTime),
-                            isExpired = currentUtcTime > expirationUtcTime,
-                            parkDuration = row.parkduration
+                            currentDate = formattedCurrent,
+                            isExpired = isExpired,
+                            parkDuration = row.parkduration,
+                            showBuyButton = isExpired,
+                            canFine = canFine
                         }
                        
-                        if currentUtcTime <= expirationUtcTime then
+                        if not isExpired then
                             SerNotify(source, "Parking Meter",
                                 string.format(translations.PrkingGood or "Valid parking ticket for %s until %s",
                                     LicensePlate,
@@ -317,7 +316,7 @@ RegisterNetEvent('meter:GetDataFromDBForUI', function(source, LicensePlate, stre
                                 5000
                             )
                         else
-                            local timeDiff = os.difftime(currentUtcTime, expirationUtcTime)
+                            local timeDiff = os.difftime(currentTimestamp, expirationTimestamp)
                             local minutesOvertime = math.floor(timeDiff / 60)
                             SerNotify(source, "Parking Meter",
                                 string.format(translations.PrkingOvertime or "Parking expired by %s",
@@ -328,8 +327,25 @@ RegisterNetEvent('meter:GetDataFromDBForUI', function(source, LicensePlate, stre
                             )
                         end
                     else
-                        debug("Failed to get expiration timestamp")
-                        ticketData.message = "Error reading ticket expiration time"
+                        debug("Failed to get valid timestamp")
+                        
+                        ticketData = {
+                            hasTicket = true,
+                            licensePlate = LicensePlate,
+                            streetName = streetName,
+                            expirationTime = "Unknown",
+                            currentDate = os.date("%Y-%m-%d %H:%M:%S", currentTimestamp),
+                            isExpired = false,
+                            parkDuration = row.parkduration,
+                            showBuyButton = true,
+                            canFine = canFine  
+                        }
+                       
+                        SerNotify(source, "Parking Meter",
+                            "Parking ticket information retrieved, but time comparison unavailable",
+                            "info",
+                            5000
+                        )
                     end
                     break
                 end
@@ -339,18 +355,86 @@ RegisterNetEvent('meter:GetDataFromDBForUI', function(source, LicensePlate, stre
                 ticketData.message = translations and
                     string.format(translations.NoParkingTicketForThisStreet or "No parking ticket for %s at this location", LicensePlate) or
                     "No valid parking ticket found for this location"
+                ticketData.showBuyButton = true
                 SerNotify(source, "Parking Meter", ticketData.message, "error", 5000)
             end
         else
             SerNotify(source, "Parking Meter", ticketData.message, "error", 5000)
         end
-       
         debug("Sending ticket data to client: " .. json.encode(ticketData))
         TriggerClientEvent('meter:DisplayTicketUI', source, ticketData)
     end)
 end)
 
+RegisterNetEvent('meter:IssueFine', function(licensePlate, streetName, fineAmount)
+    local source = source
+    local Player = GetPlayer(source)
+    
+    if not Player then 
+        debug("Player not found")
+        return 
+    end
 
+    local hasPermission = false
+    local playerJob = ""
+
+    if Config.Core == "qbcore" then
+        playerJob = Player.PlayerData.job.name
+    elseif Config.Core == "esx" then
+        playerJob = Player.job.name
+    end
+    
+    debug("Player job: " .. playerJob)
+    
+    for _, job in pairs(Config.JobCanCheckParkingTime) do
+        if job == playerJob then
+            debug("Player has permission to issue fines")
+            hasPermission = true
+            break
+        end
+    end
+    
+    if not hasPermission then
+        SerNotify(source, "Parking Meter", "You don't have permission to issue fines", "error", 5000)
+        debug("Player does not have permission to issue fines")
+        return
+    end
+    
+    -- Clean the license plate to ensure consistent formatting
+    if not licensePlate or licensePlate == "" then
+        SerNotify(source, "Parking Meter", "Invalid license plate", "error", 5000)
+        return
+    end
+    
+    licensePlate = string.gsub(licensePlate, "%s+", "")
+    
+    GetVehicleOwner(licensePlate, function(ownerIdentifier, found)
+        if found and ownerIdentifier then
+            local fineLabel = "Parking Fine - " .. streetName
+            
+            -- Always create a bill, even if player is online
+            if IssueBill(source, ownerIdentifier, fineAmount, fineLabel, playerJob) then
+                SerNotify(source, "Parking Meter", "Fine of $" .. fineAmount .. " issued to vehicle owner", "success", 5000)
+                
+                -- Notify the player if they're online
+                local targetPlayer = nil
+                if Config.Core == "qbcore" then
+                    targetPlayer = QBCore.Functions.GetPlayerByCitizenId(ownerIdentifier)
+                elseif Config.Core == "esx" then
+                    targetPlayer = ESX.GetPlayerFromIdentifier(ownerIdentifier)
+                end
+                
+                if targetPlayer then
+                    SerNotify(targetPlayer.source, "Parking Fine", "You have received a fine of $" .. fineAmount .. " for illegal parking at " .. streetName, "error", 5000)
+                end
+            else
+                SerNotify(source, "Parking Meter", "Failed to issue fine", "error", 5000)
+            end
+        else
+            SerNotify(source, "Parking Meter", "This vehicle is not owned by anyone. Cannot send fine.", "error", 5000)
+        end
+    end)
+end)
 if Config.UseRobbery then
     RegisterNetEvent('meter:Robbery_GetDataFromDB', function(source, pos)
         local identifier = GetPlayerIdentifier(source)

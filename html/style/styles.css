@@ -439,6 +439,55 @@ body {
     color: #777;
     text-align: center;
 }
+/* Button styles */
+.button-row {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-top: 15px;
+    gap: 10px;
+}
+
+.button-row-horizontal {
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    margin-top: 15px;
+    gap: 10px;
+}
+
+.action-button, .fine-button {
+    display: block;
+    padding: 10px 15px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    width: 100%;
+    max-width: 200px;
+    text-align: center;
+    font-weight: bold;
+    transition: all 0.3s ease;
+}
+
+.action-button {
+    background-color: #4CAF50; /* Green for buy ticket */
+    color: white;
+}
+
+.action-button:hover {
+    background-color: #45a049;
+}
+
+.fine-button {
+    background-color: #e74c3c; /* Red for fine */
+    color: white;
+}
+
+.fine-button:hover {
+    background-color: #c0392b;
+}
 
 /* Responsive adjustments */
 @media (max-width: 768px) {
